@@ -1,0 +1,1601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aura Soundboard v7 - Voicemod-Style Background Hook Engine</title>
+
+    <script>
+        if (typeof module === 'object') {
+            window.nodeModule = module;
+            window.nodeExports = exports;
+            module = undefined;
+            exports = undefined;
+        }
+    </script>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM CDNs -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <!-- Babel Standalone CDN -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script>
+        if (window.nodeModule) {
+            module = window.nodeModule;
+            exports = window.nodeExports;
+        }
+    </script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        winDark: '#12141a',
+                        winPanel: '#1a1d26',
+                        winCard: '#222633',
+                        winHover: '#2d3345',
+                        winBorder: '#343a4e',
+                        winAccent: '#6366f1',
+                        winAccentHover: '#4f46e5',
+                        winText: '#e2e8f0',
+                        winTextMuted: '#94a3b8'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        ::-webkit-scrollbar {
+            width: 7px;
+            height: 7px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #12141a;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2d3345;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6366f1;
+        }
+        
+        .marquee-container {
+            overflow: hidden;
+            white-space: nowrap;
+            width: 100%;
+            position: relative;
+        }
+        .marquee-content {
+            display: inline-block;
+            white-space: nowrap;
+            transition: transform 0.3s ease;
+        }
+        .marquee-container:hover .marquee-content {
+            animation: marquee-scroll 7s linear infinite;
+        }
+
+        @keyframes marquee-scroll {
+            0% { transform: translateX(0%); }
+            100% { transform: translateX(-50%); }
+        }
+
+        .win-glass {
+            background: rgba(26, 29, 38, 0.88);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-4px); }
+            75% { transform: translateX(4px); }
+        }
+        .animate-shake {
+            animation: shake 0.2s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="bg-winDark text-winText font-sans antialiased h-screen overflow-hidden select-none">
+    <div id="root" class="h-full"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        const STORAGE_KEY = "AURA_SOUNDBOARD_V7_CONFIG";
+
+        const Icon = ({ name, className = "w-4 h-4" }) => {
+            const icons = {
+                'volume-2': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>,
+                'headphones': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path></svg>,
+                'square': <svg className={className} fill="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>,
+                'plus': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="18" y1="12" x2="6" y2="12"></line></svg>,
+                'upload': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>,
+                'activity': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>,
+                'clock': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>,
+                'sliders': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>,
+                'waves': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12c.6 0 1.2-.4 1.7-.8l3.6-5.4c.5-.7 1.5-.7 2 0l3.6 5.4c.5.4 1.1.8 1.7.8s1.2-.4 1.7-.8l3.6-5.4c.5-.7 1.5-.7 2 0l3.6 5.4c.5.4 1.1.8 1.7.8"></path></svg>,
+                'zap': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>,
+                'play': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>,
+                'pause': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>,
+                'check': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>,
+                'keyboard': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6.01" y2="8"></line><line x1="10" y1="8" x2="10.01" y2="8"></line><line x1="14" y1="8" x2="14.01" y2="8"></line><line x1="18" y1="8" x2="18.01" y2="8"></line><line x1="8" y1="12" x2="8.01" y2="12"></line><line x1="12" y1="12" x2="12.01" y2="12"></line><line x1="16" y1="12" x2="16.01" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line></svg>,
+                'trash-2': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>,
+                'x': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>,
+                'mic': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>,
+                'shuffle': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>,
+                'undo': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>,
+                'eye': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>,
+                'layers': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>,
+                'shield': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>,
+                'check-square': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>,
+                'minimize': <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="14" x2="10" y2="14"></line><line x1="10" y1="14" x2="10" y2="20"></line><line x1="20" y1="10" x2="14" y2="10"></line><line x1="14" y1="10" x2="14" y2="4"></line></svg>
+            };
+            return icons[name] || null;
+        };
+
+        const createSynthAudioBuffer = (audioCtx, type) => {
+            const sampleRate = audioCtx.sampleRate;
+            let duration = 1.0;
+            let buffer = audioCtx.createBuffer(1, sampleRate * duration, sampleRate);
+
+            if (type === 'airhorn') {
+                duration = 0.8;
+                buffer = audioCtx.createBuffer(1, sampleRate * duration, sampleRate);
+                let data = buffer.getChannelData(0);
+                for (let i = 0; i < data.length; i++) {
+                    const t = i / sampleRate;
+                    const freq = 280 + Math.sin(t * 40) * 15;
+                    data[i] = (Math.sin(2 * Math.PI * freq * t) > 0 ? 0.3 : -0.3) * (1 - t / duration);
+                }
+            } else if (type === 'pew') {
+                duration = 0.4;
+                buffer = audioCtx.createBuffer(1, sampleRate * duration, sampleRate);
+                let data = buffer.getChannelData(0);
+                for (let i = 0; i < data.length; i++) {
+                    const t = i / sampleRate;
+                    const freq = 800 * Math.exp(-t * 12);
+                    data[i] = Math.sin(2 * Math.PI * freq * t) * (1 - t / duration);
+                }
+            } else if (type === 'chime') {
+                duration = 1.5;
+                buffer = audioCtx.createBuffer(1, sampleRate * duration, sampleRate);
+                let data = buffer.getChannelData(0);
+                for (let i = 0; i < data.length; i++) {
+                    const t = i / sampleRate;
+                    const freq = 523.25;
+                    data[i] = (Math.sin(2 * Math.PI * freq * t) + 0.5 * Math.sin(2 * Math.PI * freq * 2 * t)) * Math.exp(-t * 3);
+                }
+            } else if (type === 'quack') {
+                duration = 0.5;
+                buffer = audioCtx.createBuffer(1, sampleRate * duration, sampleRate);
+                let data = buffer.getChannelData(0);
+                for (let i = 0; i < data.length; i++) {
+                    const t = i / sampleRate;
+                    const freq = 180 + Math.sin(t * 80) * 40;
+                    data[i] = (Math.sin(2 * Math.PI * freq * t) + (Math.random() - 0.5) * 0.2) * (1 - t / duration);
+                }
+            } else if (type === 'victory') {
+                duration = 2.0;
+                buffer = audioCtx.createBuffer(1, sampleRate * duration, sampleRate);
+                let data = buffer.getChannelData(0);
+                for (let i = 0; i < data.length; i++) {
+                    const t = i / sampleRate;
+                    let freq = 440;
+                    if (t > 0.3) freq = 554.37;
+                    if (t > 0.6) freq = 659.25;
+                    if (t > 1.0) freq = 880;
+                    data[i] = Math.sin(2 * Math.PI * freq * t) * Math.exp(-(t % 0.3) * 2) * (1 - t / duration);
+                }
+            } else if (type === 'test_long') {
+                duration = 3.5;
+                buffer = audioCtx.createBuffer(1, sampleRate * duration, sampleRate);
+                let data = buffer.getChannelData(0);
+                for (let i = 0; i < data.length; i++) {
+                    const t = i / sampleRate;
+                    const freq = 300 + Math.sin(t * 10) * 150;
+                    data[i] = Math.sin(2 * Math.PI * freq * t) * 0.2 * (1 - t / duration);
+                }
+            } else {
+                duration = 0.6;
+                buffer = audioCtx.createBuffer(1, sampleRate * duration, sampleRate);
+                let data = buffer.getChannelData(0);
+                for (let i = 0; i < data.length; i++) {
+                    const t = i / sampleRate;
+                    const freq = t < 0.15 ? 987.77 : 1318.51;
+                    data[i] = Math.sin(2 * Math.PI * freq * t) * (1 - t / duration);
+                }
+            }
+            return buffer;
+        };
+
+        const generateHighResPeaks = (audioBuffer, numBars = 180) => {
+            if (!audioBuffer) return new Array(numBars).fill(0.12);
+            const rawData = audioBuffer.getChannelData(0);
+            const samplesPerBar = Math.floor(rawData.length / numBars);
+            const peaks = [];
+
+            for (let i = 0; i < numBars; i++) {
+                const start = i * samplesPerBar;
+                let max = 0;
+                for (let j = 0; j < samplesPerBar; j++) {
+                    const val = Math.abs(rawData[start + j] || 0);
+                    if (val > max) max = val;
+                }
+                const clampedBar = Math.max(0.12, max);
+                peaks.push(clampedBar);
+            }
+            return peaks;
+        };
+
+        const sliderToLogSpeed = (val) => {
+            const minp = 0;
+            const maxp = 100;
+            const minv = Math.log(0.5);
+            const maxv = Math.log(500);
+            const scale = (maxv - minv) / (maxp - minp);
+            return Math.exp(minv + scale * (val - minp));
+        };
+
+        function App() {
+            const [audioCtx, setAudioCtx] = useState(null);
+            const [soundMixBus, setSoundMixBus] = useState(null);
+            const [limiterNode, setLimiterNode] = useState(null);
+            const [micStreamNode, setMicStreamNode] = useState(null);
+
+            const [folders, setFolders] = useState(['All', 'Memes', 'FX', 'Music', 'Voice', 'Debug']);
+            const [activeFolder, setActiveFolder] = useState('All');
+            
+            const [globalPitchCents, setGlobalPitchCents] = useState(0);
+
+            const [isShiftPitching, setIsShiftPitching] = useState(false);
+            const [shiftPitchOffsetCents, setShiftPitchOffsetCents] = useState(0);
+            const shiftPitchStartRef = useRef({ startX: 0, initialGlobalPitchCents: 0 });
+
+            const [randomPitchEnabled, setRandomPitchEnabled] = useState(false);
+            const [randomPitchRangeCents, setRandomPitchRangeCents] = useState(300);
+            
+            const [vibratoEnabled, setVibratoEnabled] = useState(false);
+            const [vibratoSpeedSlider, setVibratoSpeedSlider] = useState(40);
+            const [vibratoAmplitudeCents, setVibratoAmplitudeCents] = useState(200);
+            
+            const [limiterReleaseMs, setLimiterReleaseMs] = useState(100);
+
+            const [chaosActive, setChaosActive] = useState(false);
+            const [chaosCount, setChaosCount] = useState(4);
+            const [chaosKeybind, setChaosKeybind] = useState('');
+
+            const [isSelectionMode, setIsSelectionMode] = useState(false);
+            
+            const [multiSoundKeybind, setMultiSoundKeybind] = useState('');
+            const [multiSoundMode, setMultiSoundMode] = useState('overlap');
+            const [multiAssignedSoundIds, setMultiAssignedSoundIds] = useState([]);
+            const [selectedSoundIdsForMulti, setSelectedSoundIdsForMulti] = useState([]);
+            const [showOnlyMultiAssigned, setShowOnlyMultiAssigned] = useState(false);
+            const [clearMultiConfirm, setClearMultiConfirm] = useState(false);
+
+            const [killKeybind, setKillKeybind] = useState('');
+            
+            const [audioInputDevices, setAudioInputDevices] = useState([]);
+            const [audioOutputDevices, setAudioOutputDevices] = useState([]);
+            const [selectedInputDevice, setSelectedInputDevice] = useState('default');
+            const [selectedOutputDevice, setSelectedOutputDevice] = useState('default');
+            const [showDiscordModal, setShowDiscordModal] = useState(false);
+
+            const [selectedSoundId, setSelectedSoundId] = useState('1');
+
+            const [sounds, setSounds] = useState([
+                { id: '1', name: 'Airhorn Blaster.mp3', folder: 'Memes', keybind: '', mode: 'overlap', buffer: null, type: 'airhorn', duration: 0.8, pitchCents: 0, image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80' },
+                { id: '2', name: 'Laser Pew Pew.wav', folder: 'FX', keybind: '', mode: 'overlap', buffer: null, type: 'pew', duration: 0.4, pitchCents: 0, image: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=300&auto=format&fit=crop&q=80' },
+                { id: '3', name: 'Crystal Chime Ringtone.mp3', folder: 'Music', keybind: '', mode: 'play_pause', buffer: null, type: 'chime', duration: 1.5, pitchCents: 0, image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80' },
+                { id: '4', name: 'Quack Sound Effect.wav', folder: 'Memes', keybind: '', mode: 'stop', buffer: null, type: 'quack', duration: 0.5, pitchCents: 0, image: 'https://images.unsplash.com/photo-1555685812-4b943f1cb0eb?w=300&auto=format&fit=crop&q=80' },
+                { id: '5', name: 'Coin Collect 8Bit Tone.wav', folder: 'FX', keybind: '', mode: 'hold_loop', buffer: null, type: 'coin', duration: 0.6, pitchCents: 0, image: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=300&auto=format&fit=crop&q=80' },
+                { id: '6', name: 'Victory Fanfare Trumpet.mp3', folder: 'Voice', keybind: '', mode: 'overlap', buffer: null, type: 'victory', duration: 2.0, pitchCents: 0, image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&auto=format&fit=crop&q=80' },
+                { id: '7', name: 'Super_Ultra_Mega_Long_Sound_Effect_Name_For_Marquee_Hover_Testing_v7.mp3', folder: 'Debug', keybind: '', mode: 'overlap', buffer: null, type: 'test_long', duration: 3.5, pitchCents: 0, image: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=300&auto=format&fit=crop&q=80' }
+            ]);
+
+            const activeInstancesRef = useRef([]);
+            const pausedStatesRef = useRef({});
+            const [activeInstanceCount, setActiveInstanceCount] = useState(0);
+
+            const [isScrubbing, setIsScrubbing] = useState(false);
+            const scrubberRef = useRef(null);
+
+            const [pitchDragTarget, setPitchDragTarget] = useState(null);
+            const pitchDragStartRef = useRef({ startX: 0, initialPitchCents: 0 });
+
+            const [recentSound, setRecentSound] = useState(null);
+            const [recentPeaks, setRecentPeaks] = useState(new Array(180).fill(0.12));
+            const [recentProgress, setRecentProgress] = useState(0);
+            const [recentTimeText, setTimeText] = useState("0.0s / 0.0s");
+
+            const globalSpanRef = useRef({ totalSpan: 0, maxEndTime: 0, remaining: 0, active: false });
+            const [mainTimelineState, setMainTimelineState] = useState({ totalSpan: 0, remaining: 0, active: false });
+
+            const [listeningTarget, setListeningTarget] = useState(null);
+            const [listeningPreview, setListeningPreview] = useState('');
+            const activeKeysRef = useRef(new Set());
+            const listenerComboRef = useRef('');
+            const listenerActionRef = useRef(null);
+            
+            const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, soundId: null });
+            const fileInputRef = useRef(null);
+
+            useEffect(() => {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    try {
+                        const parsed = JSON.parse(saved);
+                        if (parsed.folders) setFolders(parsed.folders);
+                        if (parsed.globalPitchCents !== undefined) setGlobalPitchCents(parsed.globalPitchCents);
+                        if (parsed.randomPitchEnabled !== undefined) setRandomPitchEnabled(parsed.randomPitchEnabled);
+                        if (parsed.randomPitchRangeCents !== undefined) setRandomPitchRangeCents(parsed.randomPitchRangeCents);
+                        if (parsed.vibratoEnabled !== undefined) setVibratoEnabled(parsed.vibratoEnabled);
+                        if (parsed.vibratoSpeedSlider !== undefined) setVibratoSpeedSlider(parsed.vibratoSpeedSlider);
+                        if (parsed.vibratoAmplitudeCents !== undefined) setVibratoAmplitudeCents(parsed.vibratoAmplitudeCents);
+                        if (parsed.limiterReleaseMs !== undefined) setLimiterReleaseMs(parsed.limiterReleaseMs);
+                        if (parsed.chaosCount !== undefined) setChaosCount(parsed.chaosCount);
+                        if (parsed.chaosKeybind !== undefined) setChaosKeybind(parsed.chaosKeybind);
+                        if (parsed.multiSoundKeybind !== undefined) setMultiSoundKeybind(parsed.multiSoundKeybind);
+                        if (parsed.multiSoundMode !== undefined) setMultiSoundMode(parsed.multiSoundMode);
+                        if (parsed.multiAssignedSoundIds) setMultiAssignedSoundIds(parsed.multiAssignedSoundIds);
+                        if (parsed.killKeybind !== undefined) setKillKeybind(parsed.killKeybind);
+                        if (parsed.sounds) {
+                            setSounds(prev => prev.map(s => {
+                                const matched = parsed.sounds.find(p => p.id === s.id);
+                                return matched ? { ...s, keybind: matched.keybind || '', mode: matched.mode || s.mode, pitchCents: matched.pitchCents || 0 } : s;
+                            }));
+                        }
+                    } catch (e) {
+                        console.error("Config Load Error:", e);
+                    }
+                }
+            }, []);
+
+            useEffect(() => {
+                const config = {
+                    folders,
+                    globalPitchCents,
+                    randomPitchEnabled,
+                    randomPitchRangeCents,
+                    vibratoEnabled,
+                    vibratoSpeedSlider,
+                    vibratoAmplitudeCents,
+                    limiterReleaseMs,
+                    chaosCount,
+                    chaosKeybind,
+                    multiSoundKeybind,
+                    multiSoundMode,
+                    multiAssignedSoundIds,
+                    killKeybind,
+                    sounds: sounds.map(s => ({ id: s.id, keybind: s.keybind, mode: s.mode, pitchCents: s.pitchCents }))
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+            }, [folders, globalPitchCents, randomPitchEnabled, randomPitchRangeCents, vibratoEnabled, vibratoSpeedSlider, vibratoAmplitudeCents, limiterReleaseMs, chaosCount, chaosKeybind, multiSoundKeybind, multiSoundMode, multiAssignedSoundIds, killKeybind, sounds]);
+
+            const getAudioContext = useCallback(() => {
+                if (!audioCtx) {
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    
+                    const bus = ctx.createGain();
+                    const limiter = ctx.createDynamicsCompressor();
+                    limiter.threshold.setValueAtTime(-0.5, ctx.currentTime);
+                    limiter.knee.setValueAtTime(0, ctx.currentTime);
+                    limiter.ratio.setValueAtTime(20, ctx.currentTime);
+                    limiter.attack.setValueAtTime(0.001, ctx.currentTime);
+                    limiter.release.setValueAtTime(limiterReleaseMs / 1000, ctx.currentTime);
+
+                    bus.connect(limiter);
+                    limiter.connect(ctx.destination);
+
+                    setAudioCtx(ctx);
+                    setSoundMixBus(bus);
+                    setLimiterNode(limiter);
+                    if (ctx.state === 'suspended') ctx.resume();
+                    return ctx;
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                return audioCtx;
+            }, [audioCtx, limiterReleaseMs]);
+
+            useEffect(() => {
+                if (limiterNode && audioCtx) {
+                    limiterNode.release.setValueAtTime(limiterReleaseMs / 1000, audioCtx.currentTime);
+                }
+            }, [limiterReleaseMs, limiterNode, audioCtx]);
+
+            useEffect(() => {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                setAudioCtx(ctx);
+                
+                setSounds(prev => prev.map(s => {
+                    const buf = createSynthAudioBuffer(ctx, s.type);
+                    return { ...s, buffer: buf, duration: buf.duration };
+                }));
+
+                if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+                    navigator.mediaDevices.enumerateDevices().then(devices => {
+                        setAudioInputDevices(devices.filter(d => d.kind === 'audioinput'));
+                        setAudioOutputDevices(devices.filter(d => d.kind === 'audiooutput'));
+                    }).catch(() => {});
+                }
+            }, []);
+
+            const setupMicrophoneStream = async (deviceId) => {
+                if (!audioCtx) return;
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        audio: deviceId === 'default' ? true : { deviceId: { exact: deviceId } }
+                    });
+                    if (micStreamNode) micStreamNode.disconnect();
+                    const micNode = audioCtx.createMediaStreamSource(stream);
+                    micNode.connect(audioCtx.destination);
+                    setMicStreamNode(micNode);
+                } catch (err) {
+                    console.error("Microphone Setup Error:", err);
+                }
+            };
+
+            const updateActiveVoicesParams = useCallback(() => {
+                activeInstancesRef.current.forEach(inst => {
+                    const soundObj = sounds.find(s => s.id === inst.soundId);
+                    if (soundObj && inst.source && inst.source.detune) {
+                        const totalPitchCents = globalPitchCents + shiftPitchOffsetCents + (soundObj.pitchCents || 0) + (inst.randomOffsetCents || 0);
+                        try {
+                            inst.source.detune.setValueAtTime(totalPitchCents, audioCtx ? audioCtx.currentTime : 0);
+                        } catch(e){}
+                    }
+
+                    if (inst.lfoNode && inst.lfoGain) {
+                        const calculatedSpeed = sliderToLogSpeed(vibratoSpeedSlider);
+                        try {
+                            inst.lfoNode.frequency.setValueAtTime(vibratoEnabled ? calculatedSpeed : 0.001, audioCtx ? audioCtx.currentTime : 0);
+                            inst.lfoGain.gain.setValueAtTime(vibratoEnabled ? vibratoAmplitudeCents : 0, audioCtx ? audioCtx.currentTime : 0);
+                        } catch(e){}
+                    }
+                });
+            }, [sounds, globalPitchCents, shiftPitchOffsetCents, vibratoEnabled, vibratoSpeedSlider, vibratoAmplitudeCents, audioCtx]);
+
+            useEffect(() => {
+                updateActiveVoicesParams();
+            }, [globalPitchCents, shiftPitchOffsetCents, sounds, vibratoEnabled, vibratoSpeedSlider, vibratoAmplitudeCents, updateActiveVoicesParams]);
+
+            const cancelKeybindAssignment = useCallback(() => {
+                if (listeningTarget) {
+                    const initial = listeningTarget.initialKeybind;
+                    if (listeningTarget.type === 'sound') {
+                        setSounds(prev => prev.map(s => s.id === listeningTarget.id ? { ...s, keybind: initial } : s));
+                    } else if (listeningTarget.type === 'kill') {
+                        setKillKeybind(initial);
+                    } else if (listeningTarget.type === 'chaos') {
+                        setChaosKeybind(initial);
+                    } else if (listeningTarget.type === 'multi') {
+                        setMultiSoundKeybind(initial);
+                    }
+                    setListeningTarget(null);
+                    setListeningPreview('');
+                    activeKeysRef.current.clear();
+                    listenerActionRef.current = null;
+                    listenerComboRef.current = '';
+                }
+            }, [listeningTarget]);
+
+            const startInstance = (ctx, sound, mode, offset = 0) => {
+                const source = ctx.createBufferSource();
+                source.buffer = sound.buffer;
+
+                if (mode === 'hold_loop') source.loop = true;
+
+                let totalPitchCents = globalPitchCents + shiftPitchOffsetCents + (sound.pitchCents || 0);
+                let randomOffsetCents = 0;
+
+                if (randomPitchEnabled) {
+                    randomOffsetCents = (Math.random() * 2 - 1) * randomPitchRangeCents;
+                    totalPitchCents += randomOffsetCents;
+                }
+                source.detune.value = totalPitchCents;
+
+                const gainNode = ctx.createGain();
+
+                let lfoNode = null;
+                let lfoGain = null;
+                if (vibratoEnabled) {
+                    lfoNode = ctx.createOscillator();
+                    lfoGain = ctx.createGain();
+                    
+                    const calculatedSpeed = sliderToLogSpeed(vibratoSpeedSlider);
+                    lfoNode.type = 'sine';
+                    lfoNode.frequency.value = calculatedSpeed;
+                    lfoGain.gain.value = vibratoAmplitudeCents;
+                    
+                    lfoNode.connect(lfoGain);
+                    lfoGain.connect(source.detune);
+                    lfoNode.start();
+                }
+
+                source.connect(gainNode);
+                if (soundMixBus) gainNode.connect(soundMixBus);
+                else gainNode.connect(ctx.destination);
+
+                const instanceId = Math.random().toString(36).substr(2, 9);
+                const duration = sound.duration;
+
+                const instance = {
+                    id: instanceId,
+                    soundId: sound.id,
+                    soundName: sound.name,
+                    source,
+                    gainNode,
+                    lfoNode,
+                    lfoGain,
+                    randomOffsetCents,
+                    startTime: ctx.currentTime - offset,
+                    duration,
+                    mode,
+                    isPaused: false
+                };
+
+                source.start(0, offset);
+
+                source.onended = () => {
+                    if (lfoNode) {
+                        try { lfoNode.stop(); lfoNode.disconnect(); } catch (e) {}
+                    }
+                    activeInstancesRef.current = activeInstancesRef.current.filter(inst => inst.id !== instanceId);
+                    setActiveInstanceCount(activeInstancesRef.current.length);
+                };
+
+                activeInstancesRef.current.push(instance);
+                setActiveInstanceCount(activeInstancesRef.current.length);
+
+                setRecentSound({
+                    instanceId,
+                    soundId: sound.id,
+                    name: sound.name,
+                    duration: sound.duration,
+                    startTime: ctx.currentTime - offset,
+                    buffer: sound.buffer,
+                    instance
+                });
+
+                setRecentPeaks(generateHighResPeaks(sound.buffer, 180));
+                updateGlobalTimelineOnTrigger(ctx.currentTime, duration - offset);
+            };
+
+            const lastTriggerRef = useRef({});
+
+            const playSound = useCallback((soundId, overrideMode = null) => {
+                const now = Date.now();
+                if (lastTriggerRef.current[soundId] && now - lastTriggerRef.current[soundId] < 80) return;
+                lastTriggerRef.current[soundId] = now;
+
+                const ctx = getAudioContext();
+                const sound = sounds.find(s => s.id === soundId);
+                if (!sound || !sound.buffer) return;
+
+                setSelectedSoundId(soundId);
+
+                const mode = overrideMode || sound.mode;
+                const existingIndex = activeInstancesRef.current.findIndex(inst => inst.soundId === soundId);
+                
+                if (existingIndex !== -1) {
+                    const existing = activeInstancesRef.current[existingIndex];
+
+                    if (mode === 'play_pause') {
+                        try {
+                            const elapsed = (ctx.currentTime - existing.startTime) % sound.duration;
+                            pausedStatesRef.current[soundId] = elapsed;
+                            existing.source.stop();
+                            existing.source.disconnect();
+                        } catch (e) {}
+                        activeInstancesRef.current.splice(existingIndex, 1);
+                        setActiveInstanceCount(activeInstancesRef.current.length);
+                        return;
+                    } else if (mode === 'stop') {
+                        try {
+                            delete pausedStatesRef.current[soundId];
+                            existing.source.stop();
+                            existing.source.disconnect();
+                        } catch (e) {}
+                        activeInstancesRef.current.splice(existingIndex, 1);
+                        setActiveInstanceCount(activeInstancesRef.current.length);
+                        return;
+                    }
+                }
+
+                let startOffset = 0;
+                if (mode === 'play_pause' && pausedStatesRef.current[soundId] !== undefined) {
+                    startOffset = pausedStatesRef.current[soundId];
+                    delete pausedStatesRef.current[soundId];
+                }
+
+                startInstance(ctx, sound, mode, startOffset);
+            }, [sounds, globalPitchCents, shiftPitchOffsetCents, getAudioContext, randomPitchEnabled, randomPitchRangeCents, vibratoEnabled, vibratoSpeedSlider, vibratoAmplitudeCents, soundMixBus]);
+
+            const updateGlobalTimelineOnTrigger = (now, newDuration) => {
+                const g = globalSpanRef.current;
+                const projectedEndTime = now + newDuration;
+
+                if (!g.active || g.remaining <= 0.05) {
+                    g.totalSpan = newDuration;
+                    g.maxEndTime = projectedEndTime;
+                    g.active = true;
+                } else if (projectedEndTime > g.maxEndTime) {
+                    g.totalSpan += (projectedEndTime - g.maxEndTime);
+                    g.maxEndTime = projectedEndTime;
+                }
+            };
+
+            const stopHoldInstance = (soundId) => {
+                const existingIndex = activeInstancesRef.current.findIndex(inst => inst.soundId === soundId && inst.mode === 'hold_loop');
+                if (existingIndex !== -1) {
+                    const inst = activeInstancesRef.current[existingIndex];
+                    try { inst.source.stop(); inst.source.disconnect(); } catch (e) {}
+                    activeInstancesRef.current.splice(existingIndex, 1);
+                    setActiveInstanceCount(activeInstancesRef.current.length);
+                }
+            };
+
+            const killAllSounds = useCallback(() => {
+                activeInstancesRef.current.forEach(inst => {
+                    try {
+                        if (inst.source) { inst.source.stop(); inst.source.disconnect(); }
+                        if (inst.lfoNode) { inst.lfoNode.stop(); inst.lfoNode.disconnect(); }
+                    } catch (e) {}
+                });
+                activeInstancesRef.current = [];
+                pausedStatesRef.current = {};
+                setActiveInstanceCount(0);
+                globalSpanRef.current.remaining = 0;
+                globalSpanRef.current.active = false;
+            }, []);
+
+            const triggerChaosBurst = useCallback(() => {
+                if (!chaosActive) return;
+                const currentFolderSounds = activeFolder === 'All' ? sounds : sounds.filter(s => s.folder === activeFolder);
+                if (currentFolderSounds.length === 0) return;
+
+                const count = Math.min(chaosCount, currentFolderSounds.length);
+                const selected = [...currentFolderSounds].sort(() => 0.5 - Math.random()).slice(0, count);
+                selected.forEach(sound => playSound(sound.id, 'overlap'));
+            }, [chaosActive, chaosCount, activeFolder, sounds, playSound]);
+
+            const triggerMultiSoundKeybind = useCallback(() => {
+                if (multiAssignedSoundIds.length === 0) return;
+                multiAssignedSoundIds.forEach(id => playSound(id, multiSoundMode));
+            }, [multiAssignedSoundIds, multiSoundMode, playSound]);
+
+            const processAudioFiles = (files) => {
+                const ctx = getAudioContext();
+                Array.from(files).forEach(file => {
+                    if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|wav|ogg|flac|m4a)$/i)) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        ctx.decodeAudioData(e.target.result, (decodedBuffer) => {
+                            const newSound = {
+                                id: Math.random().toString(36).substr(2, 9),
+                                name: file.name,
+                                folder: activeFolder === 'All' ? 'Memes' : activeFolder,
+                                keybind: '',
+                                mode: 'overlap',
+                                buffer: decodedBuffer,
+                                type: 'custom',
+                                duration: decodedBuffer.duration,
+                                pitchCents: 0,
+                                image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80'
+                            };
+                            setSounds(prev => [...prev, newSound]);
+                        });
+                    };
+                    reader.readAsArrayBuffer(file);
+                });
+            };
+
+            const handleScrubberAction = (e) => {
+                if (!recentSound || !scrubberRef.current) return;
+                const rect = scrubberRef.current.getBoundingClientRect();
+                const clickRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                const newOffset = clickRatio * recentSound.duration;
+
+                activeInstancesRef.current.filter(inst => inst.soundId === recentSound.soundId).forEach(inst => {
+                    try { inst.source.stop(); inst.source.disconnect(); } catch(err){}
+                });
+
+                const ctx = getAudioContext();
+                const soundObj = sounds.find(s => s.id === recentSound.soundId);
+                if (soundObj) startInstance(ctx, soundObj, 'overlap', newOffset);
+            };
+
+            // Throttle UI animation loop to 24 FPS for maximum lightweight performance
+            useEffect(() => {
+                let animationFrameId;
+                let lastTime = 0;
+                const fpsInterval = 1000 / 24;
+
+                const tick = (now) => {
+                    if (!lastTime) lastTime = now;
+                    const elapsed = now - lastTime;
+
+                    if (elapsed >= fpsInterval) {
+                        lastTime = now - (elapsed % fpsInterval);
+
+                        if (audioCtx) {
+                            const currentTime = audioCtx.currentTime;
+
+                            if (recentSound) {
+                                const dur = recentSound.duration || 1;
+                                const trackElapsed = Math.min(dur, Math.max(0, currentTime - recentSound.startTime));
+                                setRecentProgress(Math.min(1, trackElapsed / dur));
+                                setTimeText(`${trackElapsed.toFixed(1)}s / ${dur.toFixed(1)}s`);
+                            }
+
+                            const g = globalSpanRef.current;
+                            if (g.active) {
+                                const remaining = Math.max(0, g.maxEndTime - currentTime);
+                                g.remaining = remaining;
+                                setMainTimelineState({ totalSpan: g.totalSpan, remaining, active: remaining > 0 });
+                            }
+                        }
+                    }
+                    animationFrameId = requestAnimationFrame(tick);
+                };
+
+                animationFrameId = requestAnimationFrame(tick);
+                return () => cancelAnimationFrame(animationFrameId);
+            }, [audioCtx, recentSound]);
+
+            useEffect(() => {
+                const handlePointerDown = (e) => {
+                    if (e.shiftKey && e.button === 0 && !listeningTarget && !pitchDragTarget) {
+                        setIsShiftPitching(true);
+                        shiftPitchStartRef.current = { startX: e.clientX, initialGlobalPitchCents: globalPitchCents };
+                    }
+                };
+                const handlePointerMove = (e) => {
+                    if (isShiftPitching) {
+                        setShiftPitchOffsetCents(Math.round((e.clientX - shiftPitchStartRef.current.startX) * 10));
+                    }
+                };
+                const handlePointerUp = () => {
+                    if (isShiftPitching) {
+                        setIsShiftPitching(false);
+                        setShiftPitchOffsetCents(0);
+                    }
+                };
+
+                window.addEventListener('pointerdown', handlePointerDown);
+                window.addEventListener('pointermove', handlePointerMove);
+                window.addEventListener('pointerup', handlePointerUp);
+                return () => {
+                    window.removeEventListener('pointerdown', handlePointerDown);
+                    window.removeEventListener('pointermove', handlePointerMove);
+                    window.removeEventListener('pointerup', handlePointerUp);
+                };
+            }, [isShiftPitching, globalPitchCents, listeningTarget, pitchDragTarget]);
+
+            const formatHotkey = (e) => {
+                const parts = [];
+                if (e.ctrlKey) parts.push('Ctrl');
+                if (e.altKey) parts.push('Alt');
+                if (e.shiftKey) parts.push('Shift');
+                
+                let key = e.key;
+                if (key === ' ') key = 'Space';
+                else if (key.length === 1) key = key.toUpperCase();
+
+                if (!['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+                    parts.push(key);
+                }
+                return parts.join(' + ');
+            };
+
+            // Setup Keybind Assignment, Occupied Validation, & Focused Triggers
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+
+                    if (e.key === 'Escape') {
+                        setClearMultiConfirm(false);
+                        if (selectedSoundIdsForMulti.length > 0) setSelectedSoundIdsForMulti([]);
+                    }
+
+                    if (listeningTarget) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        activeKeysRef.current.add(e.code || e.key);
+
+                        if (e.shiftKey && (e.key === 'Backspace' || e.code === 'Backspace')) {
+                            listenerActionRef.current = 'cancel';
+                            setListeningPreview('Cancel (Reverting)');
+                            return;
+                        }
+                        if (e.shiftKey && (e.key === 'Delete' || e.code === 'Delete')) {
+                            listenerActionRef.current = 'clear';
+                            setListeningPreview('Clear (None)');
+                            return;
+                        }
+                        if (e.key === 'Escape') {
+                            listenerActionRef.current = 'cancel';
+                            setListeningPreview('Cancel (Reverting)');
+                            return;
+                        }
+
+                        if (!['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+                            const parts = [];
+                            if (e.ctrlKey) parts.push('Ctrl');
+                            if (e.altKey) parts.push('Alt');
+                            if (e.shiftKey) parts.push('Shift');
+                            let key = e.key;
+                            if (key === ' ') key = 'Space';
+                            else if (key.length === 1) key = key.toUpperCase();
+                            parts.push(key);
+
+                            const combo = parts.join(' + ');
+                            listenerComboRef.current = combo;
+                            listenerActionRef.current = 'set';
+                            setListeningPreview(combo);
+                        } else {
+                            const mods = [];
+                            if (e.ctrlKey) mods.push('Ctrl');
+                            if (e.altKey) mods.push('Alt');
+                            if (e.shiftKey) mods.push('Shift');
+                            setListeningPreview(mods.length ? mods.join(' + ') + ' + ...' : 'Press key...');
+                        }
+                        return;
+                    }
+
+                    const hotkey = formatHotkey(e);
+
+                    if (hotkey && hotkey === killKeybind) {
+                        e.preventDefault();
+                        killAllSounds();
+                    }
+                    if (hotkey && hotkey === chaosKeybind) {
+                        e.preventDefault();
+                        triggerChaosBurst();
+                    }
+                    if (hotkey && hotkey === multiSoundKeybind) {
+                        e.preventDefault();
+                        triggerMultiSoundKeybind();
+                    }
+
+                    if (isSelectionMode) {
+                        sounds.forEach(sound => {
+                            if (sound.keybind && sound.keybind === hotkey) {
+                                e.preventDefault();
+                                setSelectedSoundIdsForMulti(prev => prev.includes(sound.id) ? prev.filter(id => id !== sound.id) : [...prev, sound.id]);
+                            }
+                        });
+                        return;
+                    }
+
+                    sounds.forEach(sound => {
+                        if (sound.keybind && sound.keybind === hotkey) {
+                            e.preventDefault();
+                            playSound(sound.id);
+                        }
+                    });
+                };
+
+                const handleKeyUp = (e) => {
+                    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+
+                    if (listeningTarget) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        activeKeysRef.current.delete(e.code || e.key);
+
+                        if (activeKeysRef.current.size === 0) {
+                            const action = listenerActionRef.current;
+                            const newCombo = listenerComboRef.current;
+                            const initial = listeningTarget.initialKeybind;
+
+                            if (action === 'cancel') {
+                                if (listeningTarget.type === 'sound') setSounds(prev => prev.map(s => s.id === listeningTarget.id ? { ...s, keybind: initial } : s));
+                                else if (listeningTarget.type === 'kill') setKillKeybind(initial);
+                                else if (listeningTarget.type === 'chaos') setChaosKeybind(initial);
+                                else if (listeningTarget.type === 'multi') setMultiSoundKeybind(initial);
+                            } else if (action === 'clear') {
+                                if (listeningTarget.type === 'sound') setSounds(prev => prev.map(s => s.id === listeningTarget.id ? { ...s, keybind: '' } : s));
+                                else if (listeningTarget.type === 'kill') setKillKeybind('');
+                                else if (listeningTarget.type === 'chaos') setChaosKeybind('');
+                                else if (listeningTarget.type === 'multi') setMultiSoundKeybind('');
+                            } else if (action === 'set' && newCombo) {
+                                const isTaken = sounds.some(s => s.keybind === newCombo && s.id !== listeningTarget?.id) ||
+                                                (killKeybind === newCombo && listeningTarget?.type !== 'kill') ||
+                                                (chaosKeybind === newCombo && listeningTarget?.type !== 'chaos') ||
+                                                (multiSoundKeybind === newCombo && listeningTarget?.type !== 'multi');
+
+                                if (isTaken) {
+                                    setListeningPreview('Occupied');
+                                    setTimeout(() => {
+                                        setListeningTarget(null);
+                                        setListeningPreview('');
+                                    }, 1000);
+                                    return;
+                                }
+
+                                if (listeningTarget.type === 'sound') setSounds(prev => prev.map(s => s.id === listeningTarget.id ? { ...s, keybind: newCombo } : s));
+                                else if (listeningTarget.type === 'kill') setKillKeybind(newCombo);
+                                else if (listeningTarget.type === 'chaos') setChaosKeybind(newCombo);
+                                else if (listeningTarget.type === 'multi') setMultiSoundKeybind(newCombo);
+                            }
+
+                            setListeningTarget(null);
+                            setListeningPreview('');
+                            listenerActionRef.current = null;
+                            listenerComboRef.current = '';
+                            activeKeysRef.current.clear();
+                        }
+                        return;
+                    }
+                };
+
+                const handleBlur = () => cancelKeybindAssignment();
+
+                window.addEventListener('keydown', handleKeyDown);
+                window.addEventListener('keyup', handleKeyUp);
+                window.addEventListener('blur', handleBlur);
+                return () => {
+                    window.removeEventListener('keydown', handleKeyDown);
+                    window.removeEventListener('keyup', handleKeyUp);
+                    window.removeEventListener('blur', handleBlur);
+                };
+            }, [listeningTarget, sounds, killKeybind, chaosKeybind, multiSoundKeybind, selectedSoundIdsForMulti, cancelKeybindAssignment, isSelectionMode, playSound, killAllSounds, triggerChaosBurst, triggerMultiSoundKeybind]);
+
+            useEffect(() => {
+                let unlisten = null;
+                if (window.__TAURI__ && window.__TAURI__.event) {
+                    window.__TAURI__.event.listen('trigger-global-hotkey', (event) => {
+                        const triggeredKey = event.payload.replace(/\s+/g, '').toUpperCase();
+                        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+
+                        sounds.forEach(sound => {
+                            if (sound.keybind && sound.keybind.replace(/\s+/g, '').toUpperCase() === triggeredKey) {
+                                playSound(sound.id);
+                            }
+                        });
+
+                        if (killKeybind && killKeybind.replace(/\s+/g, '').toUpperCase() === triggeredKey) killAllSounds();
+                        if (chaosKeybind && chaosKeybind.replace(/\s+/g, '').toUpperCase() === triggeredKey) triggerChaosBurst();
+                        if (multiSoundKeybind && multiSoundKeybind.replace(/\s+/g, '').toUpperCase() === triggeredKey) triggerMultiSoundKeybind();
+                    }).then(fn => { unlisten = fn; });
+                }
+                return () => { if (unlisten) unlisten(); };
+            }, [sounds, playSound, killKeybind, chaosKeybind, multiSoundKeybind, audioCtx, killAllSounds, triggerChaosBurst, triggerMultiSoundKeybind]);
+
+            const minimizeToSystemTray = () => {
+                if (window.__TAURI__ && window.__TAURI__.window) {
+                    window.__TAURI__.window.appWindow.hide();
+                }
+            };
+
+            return (
+                <div 
+                    className="h-screen flex flex-col bg-winDark p-4 max-w-[1400px] mx-auto select-none overflow-hidden"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => { 
+                        e.preventDefault(); 
+                        if (e.dataTransfer.files?.length > 0) processAudioFiles(e.dataTransfer.files); 
+                    }}
+                    onClick={(e) => {
+                        if (contextMenu.visible) setContextMenu({ ...contextMenu, visible: false });
+                        if (clearMultiConfirm && !e.target.closest('#btn-clear-multi')) setClearMultiConfirm(false);
+                    }}
+                >
+                    <input type="file" ref={fileInputRef} multiple accept="audio/*" className="hidden" onChange={(e) => {
+                        if (e.target.files?.length > 0) processAudioFiles(e.target.files);
+                    }} />
+
+                    {isShiftPitching && (
+                        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-2 rounded-2xl bg-indigo-600/90 text-white font-mono font-bold text-sm shadow-2xl backdrop-blur-md border border-indigo-300 animate-pulse flex items-center gap-3">
+                            <Icon name="waves" className="w-5 h-5 text-indigo-200" />
+                            <span>Shift Pitch Bend: {shiftPitchOffsetCents > 0 ? `+${shiftPitchOffsetCents}` : shiftPitchOffsetCents} ct</span>
+                        </div>
+                    )}
+
+                    <header 
+                        className="win-glass border border-winBorder rounded-2xl p-3.5 mb-3 flex flex-wrap items-center justify-between gap-3 shadow-xl shrink-0"
+                        title={"Explanation: App title and global background hook engine version bar.\nKeybind: None\nAdditional Controls: Minimizes to tray or opens Discord routing."}
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-winAccent flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
+                                <Icon name="volume-2" className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h1 className="text-xl font-bold tracking-wide text-white">AURA SOUNDBOARD v7</h1>
+                                <p className="text-xs text-winTextMuted">Windows 11 Background Hook Engine (Voicemod Mode)</p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={minimizeToSystemTray}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-winPanel hover:bg-winHover border border-winBorder text-xs text-winText transition-all"
+                                title={"Explanation: Hides app window to the Windows System Tray while keeping background keybind listener active.\nKeybind: None\nAdditional Controls: Click tray icon to restore."}
+                            >
+                                <Icon name="minimize" className="w-4 h-4 text-emerald-400" />
+                                <span>Background Tray</span>
+                            </button>
+
+                            <button 
+                                onClick={() => setShowDiscordModal(true)}
+                                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-winPanel hover:bg-winHover border border-winBorder text-xs text-winText transition-all"
+                                title={"Explanation: Opens setup modal for audio routing into Discord using virtual cables.\nKeybind: None\nAdditional Controls: Select input/output devices inside modal."}
+                            >
+                                <Icon name="headphones" className="w-4 h-4 text-winAccent" />
+                                <span>Discord Routing</span>
+                            </button>
+
+                            <div className="flex items-center gap-1 bg-rose-500/10 border border-rose-500/30 rounded-xl p-1">
+                                <button
+                                    onClick={killAllSounds}
+                                    className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-rose-900/30 transition-all active:scale-95"
+                                    title={"Explanation: Instantly stops all currently playing audio voices across the soundboard.\nKeybind: Assigned via hotkey box or Esc\nAdditional Controls: Click button or press assigned keybind."}
+                                >
+                                    <Icon name="square" className="w-3.5 h-3.5" />
+                                    <span>KILL ALL SOUNDS</span>
+                                </button>
+                                
+                                <div className="flex items-center bg-winPanel rounded-lg border border-winBorder overflow-hidden">
+                                    <button
+                                        onClick={() => setListeningTarget({ type: 'kill', initialKeybind: killKeybind })}
+                                        onContextMenu={(e) => { if (e.ctrlKey) { e.preventDefault(); setKillKeybind(''); } }}
+                                        className={`px-2 py-1.5 text-[11px] font-mono transition-all ${
+                                            listeningTarget?.type === 'kill' 
+                                                ? (listeningPreview === 'Occupied' ? 'bg-rose-600 text-white animate-shake' : 'bg-emerald-600 text-white font-bold') 
+                                                : 'text-winTextMuted hover:text-winText'
+                                        }`}
+                                        title={"Explanation: Assigns global hotkey to Kill All Sounds.\nKeybind: " + (killKeybind || 'None') + "\nAdditional Controls: Click to assign | Ctrl + Right Click to clear."}
+                                    >
+                                        {listeningTarget?.type === 'kill' ? (listeningPreview || 'Press key...') : (killKeybind || 'None')}
+                                    </button>
+                                    <button onClick={cancelKeybindAssignment} className="p-1 hover:bg-winHover text-winTextMuted border-l border-winBorder" title={"Explanation: Reverts keybind change.\nKeybind: Shift + Backspace\nAdditional Controls: Click to undo assignment."}>
+                                        <Icon name="undo" className="w-3 h-3" />
+                                    </button>
+                                    <button onClick={() => setKillKeybind('')} className="p-1 hover:bg-rose-500/20 text-rose-400 border-l border-winBorder" title={"Explanation: Clears assigned keybind.\nKeybind: Shift + Delete\nAdditional Controls: Click to clear."}>
+                                        <Icon name="x" className="w-3 h-3" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    <div 
+                        className="flex items-center justify-between mb-3 bg-winPanel/60 p-2 rounded-2xl border border-winBorder/50 shrink-0"
+                        title={"Explanation: Soundboard library category folder tabs bar.\nKeybind: None\nAdditional Controls: Click folder to filter views or click Add to create custom folders."}
+                    >
+                        <div className="flex items-center gap-2 overflow-x-auto py-0.5">
+                            <span className="text-xs font-semibold text-winTextMuted uppercase tracking-wider px-2">Folders:</span>
+                            {folders.map(folder => (
+                                <button
+                                    key={folder}
+                                    onClick={() => setActiveFolder(folder)}
+                                    className={`px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                                        activeFolder === folder ? 'bg-winAccent text-white shadow-md shadow-indigo-500/20' : 'bg-winCard hover:bg-winHover text-winTextMuted hover:text-winText'
+                                    }`}
+                                    title={`Explanation: Switch library view to ${folder} folder.\nKeybind: None\nAdditional Controls: Click tab to filter audio cards.`}
+                                >
+                                    {folder}
+                                </button>
+                            ))}
+                            <button
+                                onClick={() => {
+                                    const name = prompt("Enter new folder name:");
+                                    if (name && !folders.includes(name)) setFolders([...folders, name]);
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-winCard hover:bg-winHover text-winTextMuted text-xs flex items-center gap-1"
+                                title={"Explanation: Creates a new custom sound library folder category.\nKeybind: None\nAdditional Controls: Type folder name in prompt dialog."}
+                            >
+                                <Icon name="plus" className="w-3.5 h-3.5" />
+                                <span>Add</span>
+                            </button>
+                        </div>
+
+                        <button 
+                            onClick={() => fileInputRef.current?.click()}
+                            className="px-3 py-1.5 rounded-xl bg-winAccent/20 hover:bg-winAccent/30 border border-winAccent/40 text-winAccent text-xs font-medium flex items-center gap-1.5 transition-all shrink-0 cursor-pointer"
+                            title={"Explanation: Imports audio files from local disk into the active folder.\nKeybind: None\nAdditional Controls: Supports MP3, WAV, FLAC, OGG files."}
+                        >
+                            <Icon name="upload" className="w-3.5 h-3.5" />
+                            <span>Import Sound</span>
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 shrink-0">
+                        <div 
+                            className="win-glass p-3 rounded-2xl border border-winBorder shadow-lg"
+                            title={"Explanation: Interactive waveform scrubber displaying progress of the most recently triggered sound.\nKeybind: None\nAdditional Controls: Click or drag anywhere on waveform to jump audio playback position live."}
+                        >
+                            <div className="flex items-center justify-between mb-1.5">
+                                <div className="flex items-center gap-2">
+                                    <Icon name="activity" className="w-4 h-4 text-winAccent" />
+                                    <span className="text-xs font-semibold text-winText uppercase tracking-wider">Recent Sound Scrubber</span>
+                                </div>
+                                <span className="text-xs font-mono text-winAccent font-semibold">{recentTimeText}</span>
+                            </div>
+                            <p className="text-xs text-winTextMuted truncate mb-2">{recentSound ? recentSound.name : 'No sound triggered yet'}</p>
+                            <div 
+                                ref={scrubberRef}
+                                onPointerDown={(e) => { if (recentSound && e.button === 0) { e.currentTarget.setPointerCapture(e.pointerId); setIsScrubbing(true); handleScrubberAction(e); }}}
+                                onPointerMove={(e) => { if (isScrubbing) handleScrubberAction(e); }}
+                                onPointerUp={(e) => { if (isScrubbing) { try { e.currentTarget.releasePointerCapture(e.pointerId); } catch(err){} setIsScrubbing(false); }}}
+                                className="relative w-full h-8 bg-winDark rounded-lg overflow-hidden cursor-pointer border border-winBorder hover:border-winAccent transition-colors touch-none flex items-center px-1"
+                            >
+                                <div className="absolute inset-0 flex items-center justify-between gap-[1px] px-1.5 opacity-25">
+                                    {recentPeaks.map((peak, i) => <div key={i} className="flex-1 bg-indigo-400 rounded-full" style={{ height: `${Math.max(12, peak * 100)}%` }}></div>)}
+                                </div>
+                                <div className="absolute left-0 top-0 bottom-0 bg-indigo-600/40 border-r-2 border-indigo-300 flex items-center overflow-hidden" style={{ width: `${recentProgress * 100}%` }}>
+                                    <div className="w-full flex items-center justify-between gap-[1px] px-1.5">
+                                        {recentPeaks.map((peak, i) => <div key={i} className="flex-1 bg-indigo-300 rounded-full" style={{ height: `${Math.max(12, peak * 100)}%` }}></div>)}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div 
+                            className="win-glass p-3 rounded-2xl border border-winBorder shadow-lg"
+                            title={"Explanation: Dynamic main timeline calculating cumulative playback duration until all active sounds complete.\nKeybind: None\nAdditional Controls: View total remaining duration and active sound counts."}
+                        >
+                            <div className="flex items-center justify-between mb-1.5">
+                                <div className="flex items-center gap-2">
+                                    <Icon name="clock" className="w-4 h-4 text-emerald-400" />
+                                    <span className="text-xs font-semibold text-winText uppercase tracking-wider">Main Global Timeline</span>
+                                </div>
+                                <span className="text-xs font-mono font-semibold text-emerald-400">
+                                    {mainTimelineState.remaining.toFixed(1)}s remaining / {mainTimelineState.totalSpan.toFixed(1)}s total
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs text-winTextMuted mb-2">
+                                <span>Status: {activeInstanceCount > 0 ? `${activeInstanceCount} Active Sounds Playing` : 'Idle'}</span>
+                                <span>Dynamic Window</span>
+                            </div>
+                            <div className="relative w-full h-3 bg-winDark rounded-full overflow-hidden border border-winBorder">
+                                <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full" style={{ width: `${mainTimelineState.totalSpan > 0 ? Math.max(0, Math.min(100, (mainTimelineState.remaining / mainTimelineState.totalSpan) * 100)) : 0}%` }}></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div 
+                        className="win-glass p-2.5 rounded-2xl border border-winBorder mb-3 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0"
+                        title={"Explanation: Multi-Sound Custom Trigger panel for firing multiple selected sounds simultaneously.\nKeybind: Assigned via multi-trigger keybind box\nAdditional Controls: Toggle Selection Mode, add selected sounds, select playback mode."}
+                    >
+                        <div className="flex items-center gap-2">
+                            <Icon name="layers" className="w-4 h-4 text-emerald-400" />
+                            <span className="font-bold text-winText">Multi-Sound Custom Trigger:</span>
+                            <div className="flex items-center bg-winCard rounded-lg border border-winBorder overflow-hidden">
+                                <button
+                                    onClick={() => setListeningTarget({ type: 'multi', initialKeybind: multiSoundKeybind })}
+                                    onContextMenu={(e) => { if (e.ctrlKey) { e.preventDefault(); setMultiSoundKeybind(''); } }}
+                                    className={`px-3 py-1 text-xs font-mono transition-all ${
+                                        listeningTarget?.type === 'multi' 
+                                            ? (listeningPreview === 'Occupied' ? 'bg-rose-600 text-white animate-shake' : 'bg-emerald-600 text-white font-bold') 
+                                            : 'text-emerald-300 hover:text-white'
+                                    }`}
+                                    title={"Explanation: Assigns global multi-trigger hotkey.\nKeybind: " + (multiSoundKeybind || 'None') + "\nAdditional Controls: Click to assign | Ctrl + Right Click to clear."}
+                                >
+                                    {listeningTarget?.type === 'multi' ? (listeningPreview || 'Press key...') : (multiSoundKeybind || 'None')}
+                                </button>
+                                <button onClick={cancelKeybindAssignment} className="p-1 hover:bg-winHover text-winTextMuted border-l border-winBorder" title={"Explanation: Reverts keybind assignment.\nKeybind: Shift + Backspace\nAdditional Controls: Click to undo."}>
+                                    <Icon name="undo" className="w-3 h-3" />
+                                </button>
+                                <button onClick={() => setMultiSoundKeybind('')} className="p-1 hover:bg-rose-500/20 text-rose-400 border-l border-winBorder" title={"Explanation: Clears multi-trigger hotkey.\nKeybind: Shift + Delete\nAdditional Controls: Click to clear."}>
+                                    <Icon name="x" className="w-3 h-3" />
+                                </button>
+                            </div>
+
+                            <select 
+                                value={multiSoundMode} 
+                                onChange={(e) => setMultiSoundMode(e.target.value)} 
+                                className="bg-winDark border border-winBorder rounded-lg px-2 py-1 text-xs text-indigo-300 font-mono"
+                                title={"Explanation: Sets playback mode for multi-triggered sound group.\nKeybind: None\nAdditional Controls: Choose between Overlap, Play/Pause, Stop, or Hold/Loop."}
+                            >
+                                <option value="overlap">Overlap</option>
+                                <option value="play_pause">Play / Pause</option>
+                                <option value="stop">Stop</option>
+                                <option value="hold_loop">Hold / Loop</option>
+                            </select>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setIsSelectionMode(!isSelectionMode)}
+                                className={`px-3 py-1 rounded-lg font-bold text-xs transition-all flex items-center gap-1.5 border ${
+                                    isSelectionMode ? 'bg-amber-500 text-black border-amber-300 shadow-md animate-pulse' : 'bg-winCard text-winTextMuted hover:text-winText border-winBorder'
+                                }`}
+                                title={"Explanation: Toggles Selection Mode to select multiple sound cards for batch assignment.\nKeybind: None\nAdditional Controls: Click sound cards while ON to select/deselect."}
+                            >
+                                <Icon name="check-square" className="w-3.5 h-3.5" />
+                                <span>{isSelectionMode ? 'Selection Mode: ON' : 'Normal Mode'}</span>
+                            </button>
+
+                            <button
+                                disabled={selectedSoundIdsForMulti.length === 0}
+                                onClick={() => {
+                                    setMultiAssignedSoundIds(Array.from(new Set([...multiAssignedSoundIds, ...selectedSoundIdsForMulti])));
+                                    setSelectedSoundIdsForMulti([]);
+                                }}
+                                className={`px-3 py-1 rounded-lg font-bold text-xs transition-all flex items-center gap-1.5 border ${
+                                    selectedSoundIdsForMulti.length > 0 ? 'bg-emerald-500 hover:bg-emerald-400 text-black border-emerald-300 shadow-md animate-pulse cursor-pointer' : 'bg-winCard text-winTextMuted border-winBorder opacity-50 cursor-not-allowed'
+                                }`}
+                                title={"Explanation: Adds currently checked sound cards to the multi-trigger list.\nKeybind: None\nAdditional Controls: Click when sounds are selected."}
+                            >
+                                <Icon name="plus" className="w-3.5 h-3.5" />
+                                <span>Add {selectedSoundIdsForMulti.length} Selected</span>
+                            </button>
+
+                            <button
+                                onClick={() => setShowOnlyMultiAssigned(!showOnlyMultiAssigned)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all border ${
+                                    showOnlyMultiAssigned ? 'bg-indigo-600 text-white border-indigo-400' : 'bg-winCard text-winTextMuted hover:text-winText border-winBorder'
+                                }`}
+                                title={"Explanation: Filters library view to show only sounds assigned to multi-trigger.\nKeybind: None\nAdditional Controls: Click to toggle view filter."}
+                            >
+                                <Icon name="eye" className="w-3.5 h-3.5" />
+                                <span>{showOnlyMultiAssigned ? 'Showing Assigned' : 'Show Only Assigned'}</span>
+                            </button>
+
+                            <button
+                                id="btn-clear-multi"
+                                onClick={() => {
+                                    if (clearMultiConfirm) { setMultiAssignedSoundIds([]); setClearMultiConfirm(false); }
+                                    else setClearMultiConfirm(true);
+                                }}
+                                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all border ${
+                                    clearMultiConfirm ? 'bg-rose-600 text-white border-rose-300 animate-bounce' : 'bg-rose-950/40 text-rose-300 border-rose-800/50 hover:bg-rose-900/50'
+                                }`}
+                                title={"Explanation: Clears all sound assignments from multi-trigger list.\nKeybind: None\nAdditional Controls: Click twice to confirm."}
+                            >
+                                {clearMultiConfirm ? 'Clear all sounds?' : 'Clear Assigned'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="win-glass p-3 rounded-2xl border border-winBorder mb-3 grid grid-cols-1 lg:grid-cols-4 gap-3 text-xs shrink-0">
+                        <div 
+                            className="bg-winCard/40 p-2.5 rounded-xl border border-winBorder/40 flex flex-col justify-between"
+                            title={"Explanation: Real-time global pitch shifter and random pitch variation effects.\nKeybind: Alt + Click to reset slider\nAdditional Controls: Adjust global pitch slider or toggle random pitch range."}
+                        >
+                            <div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <span className="font-semibold text-winText flex items-center gap-1.5">
+                                        <Icon name="sliders" className="w-3.5 h-3.5 text-winAccent" />
+                                        Global Pitch Shift
+                                    </span>
+                                    <span className="font-mono text-winAccent font-bold">{globalPitchCents > 0 ? `+${globalPitchCents}` : globalPitchCents} ct</span>
+                                </div>
+                                <div className="relative group cursor-pointer" onClick={(e) => { if (e.altKey) setGlobalPitchCents(0); }}>
+                                    <input type="range" min="-2400" max="2400" step="10" value={globalPitchCents} onChange={(e) => setGlobalPitchCents(parseInt(e.target.value))} className="w-full accent-indigo-500 cursor-pointer h-1.5 bg-winDark rounded-lg mb-1" />
+                                    <span className="text-[9px] text-winTextMuted block text-right font-mono">Alt + Click to Reset</span>
+                                </div>
+                            </div>
+                            <div className="mt-2 pt-2 border-t border-winBorder/40">
+                                <button
+                                    onClick={() => setRandomPitchEnabled(!randomPitchEnabled)}
+                                    className={`w-full py-1.5 px-3 rounded-xl font-bold flex items-center justify-between transition-all border shadow-sm ${
+                                        randomPitchEnabled ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-300 shadow-emerald-900/30' : 'bg-rose-950/40 border-rose-800/50 text-rose-300 hover:bg-rose-900/50'
+                                    }`}
+                                    title={"Explanation: Applies randomized pitch variation upon retriggering audio.\nKeybind: None\nAdditional Controls: Click toggle and adjust deviation range slider."}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <Icon name="shuffle" className={`w-3.5 h-3.5 ${randomPitchEnabled ? 'text-emerald-400' : 'text-rose-400'}`} />
+                                        <span>Random Pitch ({randomPitchEnabled ? 'ACTIVE' : 'OFF'})</span>
+                                    </div>
+                                </button>
+                                <div className={`mt-2 space-y-1 transition-all ${!randomPitchEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                                    <div className="flex justify-between text-[11px] text-winTextMuted">
+                                        <span>Range:</span>
+                                        <span className="font-mono text-indigo-300 font-bold">±{randomPitchRangeCents} ct</span>
+                                    </div>
+                                    <input type="range" min="0" max="1200" step="10" value={randomPitchRangeCents} onChange={(e) => setRandomPitchRangeCents(parseFloat(e.target.value))} disabled={!randomPitchEnabled} className="w-full accent-indigo-400 cursor-pointer h-1 bg-winDark rounded-lg" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div 
+                            className="bg-winCard/40 p-2.5 rounded-xl border border-winBorder/40 flex flex-col justify-between"
+                            title={"Explanation: Vibrato LFO pitch modulation effect.\nKeybind: None\nAdditional Controls: Toggle button and adjust speed and amplitude sliders."}
+                        >
+                            <button
+                                onClick={() => setVibratoEnabled(!vibratoEnabled)}
+                                className={`w-full py-2 px-3 rounded-xl font-bold flex items-center justify-between transition-all border shadow-sm ${
+                                    vibratoEnabled ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-300 shadow-emerald-900/30' : 'bg-rose-950/40 border-rose-800/50 text-rose-300 hover:bg-rose-900/50'
+                                }`}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Icon name="waves" className={`w-4 h-4 ${vibratoEnabled ? 'text-emerald-400' : 'text-rose-400'}`} />
+                                    <span>Vibrato ({vibratoEnabled ? 'ACTIVE' : 'OFF'})</span>
+                                </div>
+                            </button>
+                            <div className={`grid grid-cols-2 gap-2.5 mt-2 pt-2 border-t border-winBorder/40 transition-all ${!vibratoEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                                <div>
+                                    <div className="flex justify-between text-[11px] text-winTextMuted mb-1">
+                                        <span>Speed (Log)</span>
+                                        <span className="font-mono text-indigo-300 font-bold">{sliderToLogSpeed(vibratoSpeedSlider).toFixed(1)} Hz</span>
+                                    </div>
+                                    <input type="range" min="0" max="100" step="1" value={vibratoSpeedSlider} onChange={(e) => setVibratoSpeedSlider(parseFloat(e.target.value))} disabled={!vibratoEnabled} className="w-full accent-indigo-500 cursor-pointer h-1 bg-winDark rounded-lg" />
+                                </div>
+                                <div>
+                                    <div className="flex justify-between text-[11px] text-winTextMuted mb-1">
+                                        <span>Amplitude</span>
+                                        <span className="font-mono text-indigo-300 font-bold">{vibratoAmplitudeCents} ct</span>
+                                    </div>
+                                    <input type="range" min="0" max="4800" step="50" value={vibratoAmplitudeCents} onChange={(e) => setVibratoAmplitudeCents(parseFloat(e.target.value))} disabled={!vibratoEnabled} className="w-full accent-indigo-500 cursor-pointer h-1 bg-winDark rounded-lg" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div 
+                            className="bg-winCard/40 p-2.5 rounded-xl border border-winBorder/40 flex flex-col justify-between"
+                            title={"Explanation: Built-in soundmix dynamics limiter ceiling to prevent audio clipping.\nKeybind: None\nAdditional Controls: Adjust release speed slider (0ms to 2000ms)."}
+                        >
+                            <div className="flex items-center gap-2 font-bold text-winText mb-2">
+                                <Icon name="shield" className="w-4 h-4 text-emerald-400" />
+                                <span>Soundmix Ceiling Limiter</span>
+                            </div>
+                            <div className="space-y-1.5 pt-1 border-t border-winBorder/40">
+                                <div className="flex justify-between text-xs text-winTextMuted">
+                                    <span>Release Speed:</span>
+                                    <span className="font-mono text-emerald-300 font-bold">{limiterReleaseMs} ms</span>
+                                </div>
+                                <input type="range" min="0" max="2000" step="10" value={limiterReleaseMs} onChange={(e) => setLimiterReleaseMs(parseInt(e.target.value))} className="w-full accent-emerald-400 cursor-pointer h-1.5 bg-winDark rounded-lg" />
+                                <span className="text-[9px] text-winTextMuted block text-right font-mono">Parallel Mic Input Excluded</span>
+                            </div>
+                        </div>
+
+                        <div 
+                            className="bg-winCard/40 p-2.5 rounded-xl border border-winBorder/40 flex flex-col justify-between"
+                            title={"Explanation: Chaos Burst mode triggers a random selection of sounds simultaneously upon hotkey press.\nKeybind: Assigned via Chaos Keybind box\nAdditional Controls: Toggle active state, adjust sound count slider, assign hotkey."}
+                        >
+                            <button
+                                onClick={() => setChaosActive(!chaosActive)}
+                                className={`w-full py-2 px-3 rounded-xl font-bold flex items-center justify-between transition-all border shadow-sm ${
+                                    chaosActive ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-300 shadow-emerald-900/30' : 'bg-rose-950/40 border-rose-800/50 text-rose-300 hover:bg-rose-900/50'
+                                }`}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Icon name="zap" className={`w-4 h-4 ${chaosActive ? 'text-emerald-400 animate-pulse' : 'text-rose-400'}`} />
+                                    <span>Chaos Burst ({chaosActive ? 'ACTIVE' : 'OFF'})</span>
+                                </div>
+                            </button>
+                            <div className={`mt-2 pt-2 border-t border-winBorder/40 space-y-2 transition-all ${!chaosActive ? 'opacity-40 pointer-events-none' : ''}`}>
+                                <div>
+                                    <div className="flex items-center justify-between text-xs mb-1">
+                                        <span className="text-winTextMuted">Random Sounds Count:</span>
+                                        <span className="font-mono text-emerald-300 font-bold">{chaosCount} sounds</span>
+                                    </div>
+                                    <input type="range" min="1" max="100" step="1" value={chaosCount} onChange={(e) => setChaosCount(parseInt(e.target.value))} disabled={!chaosActive} className="w-full accent-emerald-400 cursor-pointer h-1 bg-winDark rounded-lg" />
+                                </div>
+                                <div className="flex items-center justify-between text-xs pt-1">
+                                    <span className="text-winTextMuted">Chaos Keybind:</span>
+                                    <div className="flex items-center bg-winDark rounded-lg border border-winBorder overflow-hidden">
+                                        <button
+                                            onClick={() => setListeningTarget({ type: 'chaos', initialKeybind: chaosKeybind })}
+                                            onContextMenu={(e) => { if (e.ctrlKey) { e.preventDefault(); setChaosKeybind(''); } }}
+                                            disabled={!chaosActive}
+                                            className={`px-2 py-0.5 text-xs font-mono transition-all ${
+                                                listeningTarget?.type === 'chaos' 
+                                                    ? (listeningPreview === 'Occupied' ? 'bg-rose-600 text-white animate-shake' : 'bg-emerald-600 text-white font-bold') 
+                                                    : 'text-emerald-300'
+                                            }`}
+                                            title={"Explanation: Assigns global Chaos Burst hotkey.\nKeybind: " + (chaosKeybind || 'None') + "\nAdditional Controls: Click to assign | Ctrl + Right Click to clear."}
+                                        >
+                                            {listeningTarget?.type === 'chaos' ? (listeningPreview || 'Press key...') : (chaosKeybind || 'None')}
+                                        </button>
+                                        <button onClick={cancelKeybindAssignment} disabled={!chaosActive} className="p-1 hover:bg-winHover text-winTextMuted border-l border-winBorder" title={"Explanation: Reverts keybind assignment.\nKeybind: Shift + Backspace\nAdditional Controls: Click to undo."}>
+                                            <Icon name="undo" className="w-3 h-3" />
+                                        </button>
+                                        <button onClick={() => setChaosKeybind('')} disabled={!chaosActive} className="p-1 hover:bg-rose-500/20 text-rose-400 border-l border-winBorder" title={"Explanation: Clears Chaos hotkey.\nKeybind: Shift + Delete\nAdditional Controls: Click to clear."}>
+                                            <Icon name="x" className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <main className="flex-1 overflow-y-auto pr-1 min-h-0">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3.5 pb-4">
+                            {(activeFolder === 'All' ? sounds : sounds.filter(s => s.folder === activeFolder))
+                                .filter(s => !showOnlyMultiAssigned || multiAssignedSoundIds.includes(s.id))
+                                .map(sound => {
+                                const isPlaying = activeInstancesRef.current.some(inst => inst.soundId === sound.id);
+                                const isMultiSelected = selectedSoundIdsForMulti.includes(sound.id);
+                                const isMultiAssigned = multiAssignedSoundIds.includes(sound.id);
+
+                                return (
+                                    <div 
+                                        key={sound.id}
+                                        className={`win-glass p-2.5 rounded-2xl border transition-all flex flex-col items-center group shadow-md relative ${
+                                            isPlaying ? 'border-emerald-400 bg-emerald-950/40 shadow-lg shadow-emerald-500/20' : isMultiSelected ? 'border-amber-400 bg-amber-950/40' : selectedSoundId === sound.id ? 'border-winAccent bg-winCard/80' : 'border-winBorder/80 hover:border-winAccent/50'
+                                        }`}
+                                        onClick={(e) => {
+                                            if (isSelectionMode) {
+                                                e.stopPropagation();
+                                                setSelectedSoundIdsForMulti(prev => isMultiSelected ? prev.filter(id => id !== sound.id) : [...prev, sound.id]);
+                                                return;
+                                            }
+                                            setSelectedSoundId(sound.id);
+                                        }}
+                                        onContextMenu={(e) => {
+                                            e.preventDefault();
+                                            setSelectedSoundId(sound.id);
+                                            setContextMenu({ visible: true, x: e.clientX, y: e.clientY, soundId: sound.id });
+                                        }}
+                                        title={"Explanation: Sound card item container for " + sound.name + ".\nKeybind: " + (sound.keybind || 'None') + "\nAdditional Controls: Click to select, right-click for context menu, or press assigned keybind."}
+                                    >
+                                        {isMultiAssigned && <div className="absolute top-1 left-1 z-20 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-black" title="Assigned to multi-sound trigger list"></div>}
+
+                                        <div
+                                            onPointerDown={(e) => {
+                                                if (e.button !== 0) return;
+                                                if (e.altKey) { e.preventDefault(); e.stopPropagation(); setSounds(prev => prev.map(s => s.id === sound.id ? { ...s, pitchCents: 0 } : s)); return; }
+                                                if (e.ctrlKey) {
+                                                    e.preventDefault(); e.stopPropagation();
+                                                    e.currentTarget.setPointerCapture(e.pointerId);
+                                                    setPitchDragTarget(sound.id);
+                                                    pitchDragStartRef.current = { startX: e.clientX, initialPitchCents: sound.pitchCents || 0 };
+                                                    return;
+                                                }
+                                                e.preventDefault();
+                                                playSound(sound.id);
+                                            }}
+                                            onPointerMove={(e) => {
+                                                if (pitchDragTarget === sound.id) {
+                                                    e.preventDefault();
+                                                    const deltaX = e.clientX - pitchDragStartRef.current.startX;
+                                                    const newPitch = Math.max(-2400, Math.min(2400, pitchDragStartRef.current.initialPitchCents + Math.round((deltaX / 300) * 4800)));
+                                                    setSounds(prev => prev.map(s => s.id === sound.id ? { ...s, pitchCents: newPitch } : s));
+                                                }
+                                            }}
+                                            onPointerUp={(e) => {
+                                                if (pitchDragTarget === sound.id) {
+                                                    e.preventDefault();
+                                                    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch(err){}
+                                                    setPitchDragTarget(null);
+                                                } else if (sound.mode === 'hold_loop') stopHoldInstance(sound.id);
+                                            }}
+                                            onPointerLeave={(e) => { if (sound.mode === 'hold_loop' && pitchDragTarget !== sound.id) stopHoldInstance(sound.id); }}
+                                            className={`w-full aspect-square rounded-xl relative overflow-hidden mb-2 border cursor-pointer transition-all ${isPlaying ? 'border-emerald-400 shadow-lg shadow-emerald-500/30' : 'border-winBorder/70 hover:border-winAccent/60'}`}
+                                            title={"Explanation: Sound playback button & waveform display.\nKeybind: " + (sound.keybind || 'None') + "\nAdditional Controls: Left Click to play | Ctrl + Drag to pitch bend | Alt + Click to reset pitch."}
+                                        >
+                                            <img src={sound.image} alt={sound.name} className={`w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 ${sound.pitchCents !== 0 ? 'brightness-50' : ''}`} onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80'; }} />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/40"></div>
+                                            {sound.pitchCents !== 0 && <div className="absolute left-0 top-0 bottom-0 bg-indigo-600/60 border-r-2 border-indigo-300 transition-all pointer-events-none" style={{ width: `${Math.max(0, Math.min(100, ((sound.pitchCents + 2400) / 4800) * 100))}%` }}></div>}
+                                            <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded text-[9px] uppercase font-mono font-bold bg-black/70 backdrop-blur-md text-indigo-300 border border-indigo-500/30 shadow-md">
+                                                {sound.mode === 'play_pause' ? 'P/P' : sound.mode === 'hold_loop' ? 'HOLD' : sound.mode === 'stop' ? 'STOP' : 'OVL'}
+                                            </span>
+                                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                                {sound.pitchCents !== 0 ? (
+                                                    <span className="font-mono font-extrabold text-lg text-white drop-shadow-md bg-black/60 px-2 py-0.5 rounded-lg border border-white/20">
+                                                        {sound.pitchCents > 0 ? `+${sound.pitchCents}` : sound.pitchCents} ct
+                                                    </span>
+                                                ) : (
+                                                    <div className={`p-2.5 rounded-full transition-all ${isPlaying ? 'bg-emerald-500 text-black animate-pulse scale-110 shadow-lg shadow-emerald-500/50' : 'bg-black/50 backdrop-blur-md text-white border border-white/20 opacity-80 group-hover:opacity-100 group-hover:scale-110'}`}>
+                                                        <Icon name={isPlaying ? "volume-2" : "play"} className="w-5 h-5" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-white/10 text-[10px] font-mono font-semibold text-slate-100 shadow-md">
+                                                {sound.duration.toFixed(1)}s
+                                            </div>
+                                        </div>
+
+                                        <div className="w-full flex items-center bg-winCard rounded-lg border border-winBorder overflow-hidden mb-1.5">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setListeningTarget({ type: 'sound', id: sound.id, initialKeybind: sound.keybind }); }}
+                                                onContextMenu={(e) => { if (e.ctrlKey) { e.preventDefault(); e.stopPropagation(); setSounds(prev => prev.map(s => s.id === sound.id ? { ...s, keybind: '' } : s)); } }}
+                                                className={`flex-1 py-1 px-1.5 text-xs font-mono font-semibold transition-all text-center truncate ${
+                                                    listeningTarget?.id === sound.id
+                                                        ? (listeningPreview === 'Occupied' ? 'bg-rose-600 text-white animate-shake' : 'bg-emerald-600 text-white font-bold animate-pulse')
+                                                        : sound.keybind ? 'text-indigo-300' : 'text-winTextMuted'
+                                                }`}
+                                                title={"Explanation: Assigns global hotkey for playing " + sound.name + ".\nKeybind: " + (sound.keybind || 'None') + "\nAdditional Controls: Click to assign | Shift+Backspace to cancel | Shift+Delete or Ctrl+Right Click to clear."}
+                                            >
+                                                {listeningTarget?.id === sound.id ? (listeningPreview || 'Press key...') : (sound.keybind || 'None')}
+                                            </button>
+                                            <button onClick={(e) => { e.stopPropagation(); cancelKeybindAssignment(); }} className="p-1 hover:bg-winHover text-winTextMuted border-l border-winBorder" title={"Explanation: Reverts keybind change.\nKeybind: Shift + Backspace\nAdditional Controls: Click to undo assignment."}>
+                                                <Icon name="undo" className="w-3 h-3" />
+                                            </button>
+                                            <button onClick={(e) => { e.stopPropagation(); setSounds(prev => prev.map(s => s.id === sound.id ? { ...s, keybind: '' } : s)); }} className="p-1 hover:bg-rose-500/20 text-rose-400 border-l border-winBorder" title={"Explanation: Clears sound keybind.\nKeybind: Shift + Delete\nAdditional Controls: Click to clear."}>
+                                                <Icon name="x" className="w-3 h-3" />
+                                            </button>
+                                        </div>
+
+                                        <div className="w-full marquee-container text-center">
+                                            <div className="marquee-content text-xs text-winTextMuted group-hover:text-winText transition-colors font-medium cursor-default">
+                                                <span className="px-2">{sound.name}</span>
+                                                <span className="px-2">{sound.name}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </main>
+
+                    {contextMenu.visible && (
+                        <div className="fixed z-50 win-glass rounded-xl border border-winBorder shadow-2xl py-1.5 w-52 text-xs text-winText" style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}>
+                            <div className="px-3 py-1 text-[10px] font-semibold text-winTextMuted uppercase tracking-wider border-b border-winBorder/50">Play Trigger Mode</div>
+                            {[
+                                { id: 'overlap', label: 'Overlap (Stack Playback)' },
+                                { id: 'play_pause', label: 'Play / Pause (Pause & Resume)' },
+                                { id: 'stop', label: 'Stop & Reset on 2nd Trigger' },
+                                { id: 'hold_loop', label: 'Hold / Loop (0-Delay)' }
+                            ].map(m => {
+                                const currentSound = sounds.find(s => s.id === contextMenu.soundId);
+                                const isActive = currentSound?.mode === m.id;
+                                return (
+                                    <button
+                                        key={m.id}
+                                        onClick={() => { setSounds(prev => prev.map(s => s.id === contextMenu.soundId ? { ...s, mode: m.id } : s)); setContextMenu({ ...contextMenu, visible: false }); }}
+                                        className={`w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-winHover transition-colors ${isActive ? 'text-winAccent font-semibold' : 'text-winText'}`}
+                                        title={`Explanation: Sets trigger playback mode to ${m.label}.\nKeybind: None\nAdditional Controls: Click to select mode.`}
+                                    >
+                                        <span>{m.label}</span>
+                                        {isActive && <Icon name="check" className="w-3.5 h-3.5 text-winAccent" />}
+                                    </button>
+                                );
+                            })}
+                            <div className="border-t border-winBorder/50 my-1"></div>
+                            <button onClick={() => { const s = sounds.find(x => x.id === contextMenu.soundId); setListeningTarget({ type: 'sound', id: contextMenu.soundId, initialKeybind: s?.keybind }); setContextMenu({ ...contextMenu, visible: false }); }} className="w-full text-left px-3 py-1.5 hover:bg-winHover flex items-center gap-2 text-winText" title="Explanation: Changes keybind assignment for this sound.\nKeybind: None\nAdditional Controls: Click to enter assignment mode.">
+                                <Icon name="keyboard" className="w-3.5 h-3.5 text-winAccent" />
+                                <span>Change Keybind</span>
+                            </button>
+                            <button onClick={() => { setSounds(prev => prev.filter(s => s.id !== contextMenu.soundId)); setContextMenu({ ...contextMenu, visible: false }); }} className="w-full text-left px-3 py-1.5 hover:bg-rose-500/20 text-rose-400 flex items-center gap-2" title="Explanation: Deletes this sound card from library.\nKeybind: None\nAdditional Controls: Click to delete permanently.">
+                                <Icon name="trash-2" className="w-3.5 h-3.5" />
+                                <span>Delete Sound</span>
+                            </button>
+                        </div>
+                    )}
+
+                    {showDiscordModal && (
+                        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                            <div className="win-glass max-w-lg w-full rounded-2xl border border-winBorder p-6 shadow-2xl relative text-xs" title="Explanation: Discord & Virtual Audio Device Setup Modal.\nKeybind: None\nAdditional Controls: Configure input/output devices.">
+                                <button onClick={() => setShowDiscordModal(false)} className="absolute top-4 right-4 text-winTextMuted hover:text-white" title="Explanation: Close modal.\nKeybind: Esc\nAdditional Controls: Click to close.">
+                                    <Icon name="x" className="w-5 h-5" />
+                                </button>
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="p-2.5 rounded-xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-400">
+                                        <Icon name="mic" className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-base font-bold text-white">Discord & Audio Device Setup</h3>
+                                        <p className="text-winTextMuted">Stream soundboard audio into Discord while monitoring on speakers</p>
+                                    </div>
+                                </div>
+                                <div className="space-y-3 text-winText text-xs leading-relaxed">
+                                    <div className="bg-winCard p-3 rounded-xl border border-winBorder">
+                                        <p className="font-semibold text-indigo-300 mb-1">Step 1: Install VB-Audio Cable</p>
+                                        <p className="text-winTextMuted">Download and install the free VB-Audio Virtual Cable driver on Windows 11.</p>
+                                    </div>
+                                    <div className="bg-winCard p-3 rounded-xl border border-winBorder">
+                                        <p className="font-semibold text-indigo-300 mb-1">Step 2: Discord Input Device</p>
+                                        <p className="text-winTextMuted">In Discord under <b>Voice & Video</b> settings, set your <b>Input Device</b> to <i>CABLE Output (VB-Audio Virtual Cable)</i>.</p>
+                                    </div>
+                                </div>
+                                <div className="mt-6 flex justify-end">
+                                    <button onClick={() => setShowDiscordModal(false)} className="px-4 py-2 rounded-xl bg-winAccent hover:bg-winAccentHover text-white font-semibold" title="Explanation: Close setup modal.\nKeybind: Enter / Click\nAdditional Controls: Click to dismiss.">
+                                        Got It, Ready!
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
